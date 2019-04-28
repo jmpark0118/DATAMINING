@@ -1,0 +1,177 @@
+---
+title: "linear model selection"
+author: "jmpark"
+output: 
+  html_document :
+    df_print : paged
+---
+
+### LIBRARY
+```{r, message=FALSE, warning=FALSE}
+library(cluster)
+library(knitr)
+library(kableExtra)
+library(tidyverse)
+library(leaps)
+
+```
+
+
+### LOAD DATA
+```{r, message=FALSE, warning=FALSE}
+algae <- read.table('C:/Users/jeong/Desktop/데이터마이닝/Analysis.txt',
+                    header=F,
+                    dec='.',
+                    col.names=c('season','size','speed','mxPH','mnO2','Cl','NO3',
+                                'NH4','oPO4','PO4','Chla','a1','a2','a3','a4','a5','a6','a7'),
+                    na.strings=c('XXXXXXX'))
+algae <- algae[-c(62,199),]
+clean.algae <- algae
+ 
+dist.mtx <- as.matrix(daisy(algae[,1:11],stand=T))
+ 
+central.value <- function(x) {
+     if (is.numeric(x)) median(x,na.rm=T)
+     else if (is.factor(x)) levels(x)[which.max(table(x))]
+     else {
+         f <- as.factor(x)
+         levels(f)[which.max(table(f))]
+     }
+}
+ 
+for(r in which(!complete.cases(algae)))
+  clean.algae[r,which(is.na(algae[r,]))] <- apply(
+    data.frame(algae[c(as.integer(names(sort(dist.mtx[r,])[2:11]))), 
+                     which(is.na(algae[r,]))]),
+    2,central.value)
+
+clean.algae[!complete.cases(clean.algae),]
+head(clean.algae)
+
+```
+
+
+### Linear model selection
+  * forward selection
+  * backward elimination
+  * stepwise
+```{r, message=FALSE, warning=FALSE, fig.align='center'}
+lm1.full <- lm(a1 ~ ., data=clean.algae[,1:12])
+summary(lm1.full)
+lm1.null <- lm(a1 ~ 1, data=clean.algae[,1:12])
+summary(lm1.null)
+lm1.step <- step(lm1.full, direction="both", trace = 0)  # default
+
+mean(clean.algae$a1)
+plot(clean.algae$a1)
+abline(h=mean(clean.algae$a1))
+
+# Forwad Selection (FS)
+lm1.fs <- step(lm1.null,scope=list(upper=lm1.full),
+               direction="forward", 
+               trace = 0)
+summary(lm1.fs)
+extractAIC(lm1.fs)[2]
+
+# Backward Elimination (BE)
+lm1.be <- step(lm1.full,scope=list(lower=lm1.null), 
+               direction="backward",
+               trace = 0)
+summary(lm1.be)
+extractAIC(lm1.be)[2]
+```
+
+```{r, message=FALSE, warning=FALSE, fig.align='center', fig.width=9, fig.height=8}
+# Stepwise
+lm1.step <- step(lm1.full, trace = 0)
+summary(lm1.step)
+names(lm1.step)
+par(mfrow = c(2,2))
+plot(lm1.step)
+# the plot gets bigger(shape of a triangle)
+# violates equal variance assumption
+# leverage point : a point which has a big influence to the regression line
+```
+
+### Compare FS, BE, stepwise
+```{r, message=FALSE, warning=FALSE}
+d <- rbind(cbind(round(summary(lm1.step)$coefficients,2), 'AIC'=rep(extractAIC(lm1.step)[2],7)),
+           cbind(round(summary(lm1.fs)$coefficients,2), 'AIC'=rep(extractAIC(lm1.fs)[2],7)),
+           cbind(round(summary(lm1.be)$coefficients,2), 'AIC'=rep(extractAIC(lm1.be)[2],7))) 
+d %>% 
+  kable() %>% 
+  kable_styling(full_width = F) %>%
+  collapse_rows(columns = 6, valign = "middle") %>%
+  column_spec(1, bold = T, border_right = T) %>%
+  pack_rows("Stepwise Selection", 1, 7, label_row_css = "background-color: #666; color: #fff;") %>%
+  pack_rows("Forward Selection", 8, 14, label_row_css = "background-color: #666; color: #fff;") %>% 
+  pack_rows("Backward Elimination", 15, 21, label_row_css = "background-color: #666; color: #fff;")  
+
+
+```
+
+### Predict 
+```{r, message=FALSE, warning=FALSE, fig.align='center', fig.height=6, fig.width=7}
+lm1.pred <- predict(lm1.step, clean.algae[,1:12])
+head(lm1.pred)
+par(mfrow=c(1,1))
+plot(clean.algae$a1, lm1.pred,
+     xlab="observed", ylab="fitted")
+abline(0,1,col=2)
+abline(h=0,col=3)
+# if you check `summary(lm1.step)` the R-squared value is 0.3321
+# the value is small which means that it is not fitted well
+summary(clean.algae$a1)
+summary(lm1.pred)
+
+```
+
+### Using `leaps::regsubsets`
+  * RSS
+  * Adjusted $R^2$
+  * $C_p$
+  * BIC
+```{r, message=FALSE, warning=FALSE, fig.align='center', fig.height=6, fig.width=9}
+regfit.full = regsubsets(a1 ~ ., data = clean.algae[,1:12], nvmax = 15)
+reg.summary <- summary(regfit.full)
+names(reg.summary)
+
+par(mfrow=c(2,2))
+# RSS (Residual Sum of Squares)
+plot(reg.summary$rss, xlab = 'Number of Variables',
+     ylab = 'RSS', type = 'l')
+# Adjusted R-square
+plot(reg.summary$adjr2 ,xlab ="Number of Variables ",
+     ylab=" Adjusted RSq",type="l")
+# which.max(reg.summary$adjr2) #7
+points(7, reg.summary$adjr2[7], col ="red",cex =2, pch =20)
+# Cp
+plot(reg.summary$cp, xlab ="Number of Variables ",ylab="Cp",
+     type='l')
+# which.min (reg.summary$cp) #5
+points(5, reg.summary$cp[5], col ="red",cex =2, pch =20)
+# BIC
+plot(reg.summary$bic,xlab=" Number of Variables",
+     ylab="BIC", type='l')
+# which.min (reg.summary$bic) #3
+points(3, reg.summary$bic[3], col="red", cex =2, pch =20)
+```
+
+```{r, message=FALSE, warning=FALSE, fig.align='center'}
+par(mfrow=c(1,1))
+plot(regfit.full ,scale ="r2")
+plot(regfit.full ,scale ="adjr2")
+plot(regfit.full ,scale ="Cp")
+plot(regfit.full ,scale ="bic")
+regfit.fwd = regsubsets(a1 ~ ., data = clean.algae[,1:12],
+                        nvmax = 15, method = 'forward')
+summary(regfit.fwd)$outmat
+regfit.bwd = regsubsets(a1 ~ ., data = clean.algae[,1:12],
+                        nvmax = 15, method = 'backward')
+summary(regfit.bwd)$outmat
+coef(regfit.full, 5)
+coef(regfit.fwd, 5)
+coef(regfit.bwd, 5)
+
+```
+
