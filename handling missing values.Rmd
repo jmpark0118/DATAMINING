@@ -1,0 +1,203 @@
+---
+title: "Handling missing values!"
+author: "jmpark"
+output: 
+  html_document :
+    df_print : paged
+---
+
+### LIBRARY
+```{r, message=FALSE, warning=FALSE}
+library(knitr)
+library(kableExtra)
+library(tidyverse)
+library(cluster)
+
+```
+
+
+### LOAD DATA
+```{r, message=FALSE, warning=FALSE}
+algae <- read.table('C:/Users/jeong/Desktop/데이터마이닝/Analysis.txt',
+                    header=F,
+                    dec='.',
+                    col.names=c('season','size','speed','mxPH','mnO2','Cl','NO3',
+                                'NH4','oPO4','PO4','Chla','a1','a2','a3','a4','a5','a6','a7'),
+                    na.strings=c('XXXXXXX'))
+
+algae<-algae[-c(62,199),]   # too many NA's
+dim(algae)
+
+```
+
+### Missing values
+  * mean (`mean`)
+  * median (`median`)
+  * simple linear regression using highly correlated variables (`cor`,`lm`)
+  * closest distance (`cluster::daisy`)
+```{r, message=FALSE, warning=FALSE}
+nrow(algae[!complete.cases(algae),])
+algae[!complete.cases(algae),]  
+
+```  
+</br>
+
+#### 1. mean
+```{r, message=FALSE, warning=FALSE}
+summary(algae$mxPH)
+algae[is.na(algae$mxPH),1:11] %>% 
+  mutate(mxPH = cell_spec(mxPH, "html", color = ifelse(is.na(mxPH), "red", "black"))) %>%
+  kable(format = "html", escape = F) %>%
+  kable_styling("striped", full_width = F)
+which(is.na(algae$mxPH))
+mean(algae$mxPH,na.rm=T)
+algae[48,'mxPH']<-mean(algae$mxPH,na.rm=T)
+algae[48,1:11] %>% kable %>%  kable_styling(full_width = F)
+summary(algae$mxPH)  
+
+```  
+</br>
+
+#### 2. median
+```{r, message=FALSE, warning=FALSE}
+summary(algae$Chla)
+algae[is.na(algae$Chla),1:11] %>% 
+  mutate(Chla = cell_spec(Chla, "html", color = ifelse(is.na(Chla), "red", "black"))) %>%
+  kable(format = "html", escape = F) %>%
+  kable_styling("striped", full_width = F)
+missing <- which(is.na(algae$Chla))
+missing
+algae[is.na(algae$Chla),'Chla']<-median(algae$Chla,na.rm=T)
+algae[missing,1:11] %>% kable %>%  kable_styling(full_width = F)
+summary(algae$Chla)  
+
+```
+</br>
+
+#### 3. simple linear regression with a highly correlated variable
+  * Find a variable that has a high correlation with the missing variable
+  * Fit a simple linear regression
+```{r, message=FALSE, warning=FALSE, fig.align='center'}
+summary(algae$PO4)
+algae[is.na(algae$PO4),1:11] %>% 
+  mutate(PO4 = cell_spec(PO4, "html", color = ifelse(is.na(PO4), "red", "black"))) %>%
+  kable(format = "html", escape = F) %>%
+  kable_styling("striped", full_width = F)
+missing <- which(is.na(algae$PO4))
+missing
+colnames(algae)
+sub_algae <- algae[,c(4:11)]
+names(sub_algae)
+round(cor(sub_algae, use = 'complete.obs'),2)
+symnum(cor(sub_algae, use="complete.obs"))
+# cor(PO4, oPO4) = 0.91 => highly correlated!!
+plot(sub_algae)
+
+# lm : used to fit linear models
+lm1<-lm(PO4~oPO4,data=algae)
+summary(lm1)
+algae[is.na(algae$PO4),'PO4']<-lm1$coef[1] + lm1$coef[2] * algae$oPO4[is.na(algae$PO4)]
+
+# make it to a function
+# use `oPO4` to fill NA's of `PO4`
+fillPO4<-function(oP){
+  if(is.na(oP)) return(NA)
+  else return (oP * lm1$coef[2] + lm1$coef[1])
+}
+algae[is.na(algae$PO4),'PO4'] <- sapply(algae[is.na(algae$PO4),'oPO4'],fillPO4)
+algae[missing,1:11] %>% kable %>%  kable_styling(full_width = F)
+summary(algae$PO4)
+
+```
+</br>
+
+#### 4. closest distance
+  * use observations that are similar to the observations that include the missing value
+```{r, message=FALSE, warning=FALSE}
+summary(algae$mnO2)
+algae[is.na(algae$mnO2),1:11] %>% 
+  mutate(mnO2 = cell_spec(mnO2, "html", color = ifelse(is.na(mnO2), "red", "black"))) %>%
+  kable(format = "html", escape = F) %>%
+  kable_styling("striped", full_width = F)
+missing <- which(is.na(algae$mnO2))
+missing
+algae1<-algae[,1:11]
+# computes all the pairwise dissimilarities(distances) between observations in the data set
+dist.mtx<-as.matrix(daisy(algae1,stand=T))
+dim(dist.mtx)
+# 10 closest observations
+sort(dist.mtx[is.na(algae$mnO2),])[2:11]
+aa<-as.integer(names(sort(dist.mtx[is.na(algae$mnO2),])[2:11]))
+aa
+algae[aa,'mnO2']
+mean(algae[aa,'mnO2'])
+algae[is.na(algae$mnO2),'mnO2'] <- mean(algae[aa,'mnO2'])
+algae[missing,1:11] %>% kable %>%  kable_styling(full_width = F)
+summary(algae$mnO2)
+
+```
+
+
+  * if `NA` is a numeric variable -> median
+  * if `NA` is a factor -> voting(majority)
+  * else -> change the variable to a factor
+```{r, message=FALSE, warning=FALSE}
+central.value <- function(x) {
+  if (is.numeric(x)) median(x,na.rm=T)
+  else if (is.factor(x)) levels(x)[which.max(table(x))]
+  else {
+    f <- as.factor(x)
+    levels(f)[which.max(table(f))]
+  }
+}
+
+```
+
+
+```{r, message=FALSE, warning=FALSE}
+# find rows that have NA values
+# as.integer(names(sort(dist.mtx[r,])[2:11]))
+# find 10 observations that are closest
+
+for(r in which(!complete.cases(algae))) 
+  algae[r,which(is.na(algae[r,]))] <- apply(
+    data.frame(algae[c(as.integer(names(sort(dist.mtx[r,])[2:11]))), 
+                     which(is.na(algae[r,]))]), 
+    2, central.value)
+summary(algae)
+# NO missing values!!
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
