@@ -1,0 +1,60 @@
+---
+title: "bwplot & stripplot"
+author: "jmpark"
+date: "2019년 4월 28일"
+output: 
+  html_document :
+    df_print : paged
+---
+
+### LOAD DATA
+```{r, message=FALSE, warning=FALSE, fig.align='center', fig.width=10, fig.height=9}
+algae <- read.table('C:/Users/jeong/Desktop/데이터마이닝/Analysis.txt',
+                    header=F,
+                    dec='.',
+                    col.names=c('season','size','speed','mxPH','mnO2','Cl','NO3',
+                                'NH4','oPO4','PO4','Chla','a1','a2','a3','a4','a5','a6','a7'),
+                    na.strings=c('XXXXXXX'))
+dim(algae)
+algae
+
+algae<-algae[-c(62,199),]   # too many NA's
+summary(algae)
+library(GGally)
+ggpairs(algae[,1:12])
+
+```
+
+### *bwplot*
+```{r, message=FALSE, warning=FALSE, fig.align='center'}
+library(lattice)
+# `bwplot` : box-and-whisker plots
+table(algae$size)
+bwplot(size ~ a1, data=algae,ylab='River Size',xlab='Alga A1')
+bwplot(season~a3,data=algae)
+
+# `mnO2`를 4개의 동일한 크기의 그룹으로 나눠줌
+minO2 <- equal.count(na.omit(algae$mnO2),number=4,overlap=1/5)
+minO2
+```
+
+### *stripplot*
+```{r, message=FALSE, warning=FALSE, fig.align='center'}
+# `stripplot` : one-dimensional scatter plots
+# 각 `mnO2` 그룹별로 `season`에 따른 `a3`의 산점도를 그려줌
+stripplot(season ~ a3|minO2,data=algae[!is.na(algae$mnO2),])
+
+# `NH4`를 4개의 그룹으로 나누고 각 그룹의 `size`별 `a1`의 산점도
+summary(algae$NH4)
+aa<-equal.count(na.omit(algae$NH4),number=4,overlap=1/5)
+stripplot(size~a1|aa,data=algae[!is.na(algae$NH4),])
+
+# `mxPH`를 4개의 그룹으로 나누고 각 그룹의 `size`별 `a1`의 산점도
+bb<-equal.count(na.omit(algae$mxPH),number=4,overlap=1/5)
+stripplot(size~a1|bb,data=algae[!is.na(algae$NH4),])
+bwplot(size~a1|bb,data=algae[!is.na(algae$NH4),])
+
+```
+
+
+
