@@ -15,7 +15,7 @@
     + use observations that have the shortest distance  
      
 ### 3. Linear model selection
-<img src="png/model.PNG" width="200" hspace="50"/> <img src="png/linear_model_selection.png" width="400"/>  
+<img src="png/model.PNG" width="250" hspace="50"/> <img src="png/linear_model_selection.png" width="500"/>  
 
 * Forward Selection
 * Backward Elimination
