@@ -1,0 +1,189 @@
+---
+title: "tree"
+author: "jmpark"
+date: "2019년 5월 12일"
+output: 
+  html_document 
+---
+
+### LOAD DATA
+```{r, message=FALSE, warning=FALSE}
+library(knitr)
+library(kableExtra)
+library(tidyverse)
+algae <- read.table('C:/Users/jeong/Desktop/데이터마이닝/Analysis.txt',
+                    header=F,
+                    dec='.',
+                    col.names=c('season','size','speed','mxPH','mnO2','Cl','NO3',
+                                'NH4','oPO4','PO4','Chla','a1','a2','a3','a4','a5','a6','a7'),
+                    na.strings=c('XXXXXXX'))
+algae <- algae[-c(62,199),]
+clean.algae <- algae
+library(cluster)
+dist.mtx <- as.matrix(daisy(algae,stand=T))
+
+central.value <- function(x) {
+  if (is.numeric(x)) median(x,na.rm=T)
+  else if (is.factor(x)) levels(x)[which.max(table(x))]
+  else {
+    f <- as.factor(x)
+    levels(f)[which.max(table(f))]
+  }
+}
+
+for(r in which(!complete.cases(algae))){
+  clean.algae[r,which(is.na(algae[r,]))]<-apply(
+    data.frame(algae[c(as.integer(names(sort(dist.mtx[r,])[2:11]))), 
+                     which(is.na(algae[r,]))]), 2,central.value)
+}
+
+dim(clean.algae)
+head(clean.algae,10) %>% kable() %>%
+  kable_styling(bootstrap_options = c('striped', 'hover'))
+```
+
+### TREE
+```{r, message=FALSE, warning=FALSE, fig.align='center', fig.height=6, fig.width=8}
+library(tree)
+tr1<-tree(a1 ~ ., data = clean.algae[,c(1:12)])
+plot(tr1)
+text(tr1, cex = 0.6, pretty = 0)
+summary(tr1)
+names(tr1)
+data.frame(tr1$frame)
+data.frame(tr1$frame[1,])
+# tr1의 splitting node 설명
+nrow(clean.algae)
+myy <- clean.algae$a1
+mean(myy)
+sum((myy-mean(myy))^2)
+# tr1의 첫번째 child node
+data.frame(tr1$frame[2,])
+mean(clean.algae[clean.algae$Cl<7.2915, 'a1'])
+
+# minsize : the smallest allowed node size (default=10)
+tr1 <- tree(a1 ~ ., data = clean.algae[,1:12], 
+            minsize = 20)
+plot(tr1)
+text(tr1, cex=0.7, pretty = 0)
+data.frame(tr1$frame)
+
+# mincut : the minimun number of observations to include in either child node (default=5)
+tr1<-tree(a1 ~ ., data=clean.algae[,1:12], mincut=3)
+plot(tr1)
+text(tr1, cex=0.6, pretty = 0)
+data.frame(tr1$frame)
+
+library(rpart)
+rpart.tr1 <- rpart(a1 ~ ., data = clean.algae[,1:12])
+plot(rpart.tr1, uniform = T)
+text(rpart.tr1, cex = 1, pretty = 0)
+```
+
+### TREE PRUNING (cross-validation)
+```{r, message=FALSE, warning=FALSE, fig.align='center'}
+tr1 <- tree(a1 ~ ., data = clean.algae[,1:12])
+plot(tr1)
+text(tr1, cex = 0.8, pretty = 0)
+cv.tree(tr1)
+cv1 <- cv.tree(tr1)
+cv1
+plot(cv1)
+
+mycv <- cv.tree(tr1)
+n.rep <- 100
+for (i in 2:n.rep){
+  temp1 <- cv.tree(tr1)$dev
+  mycv$dev <- mycv$dev + temp1
+}
+mycv$dev <- mycv$dev/n.rep
+plot(mycv)
+
+tr1.final <- prune.tree(tr1, best=mycv$size[which.min(mycv$dev)]) # best=3
+tr1.final
+plot(tr1.final)
+text(tr1.final)
+plot(clean.algae$a1, predict(tr1.final, clean.algae))
+```
+
+### BAGGING
+* use all the variables for each split
+```{r, message=FALSE, warning=FALSE, fig.align='center', fig.width=8, fig.height=5}
+library(randomForest)
+bag.algae <- randomForest(a1 ~ ., data = clean.algae[,1:12],
+                          mtry = 11, importance = T)
+bag.algae
+importance(bag.algae)
+varImpPlot(bag.algae)
+```
+
+```{r, message=FALSE, warning=FALSE, fig.align='center', fig.width=6}
+plot(clean.algae$a1, predict(bag.algae, clean.algae))
+abline(a = 0, b = 1, col = 2)
+```
+
+### RANDOMFOREST
+```{r, message=FALSE, warning=FALSE, fig.align='center', fig.width=8, fig.height=5}
+random.algae <- randomForest(a1 ~ ., data = clean.algae[,1:12],
+                             mtry = 6, importance = T)
+random.algae
+importance(random.algae)
+varImpPlot(random.algae)
+```
+
+```{r, message=FALSE, warning=FALSE, fig.align='center', fig.width=6}
+plot(clean.algae$a1, predict(random.algae, clean.algae))
+abline(a = 0, b = 1, col = 2)
+```
+
+### Compare MSE
+```{r, message=FALSE, warning=FALSE}
+n <- nrow(clean.algae)
+p <- 0.7
+rep.n <- 100
+mse <- matrix(0, nrow = rep.n, ncol = 5)
+colnames(mse) <- c('lm error', 'tree error', 'prune error',
+                   'bagging error', 'randomForest error')
+mydata1 <- clean.algae[,1:12]
+set.seed(1)
+for (i in 1:rep.n){
+  train.ind <- sample(n,as.integer(n*p))  #get train index randomly
+  train.data <- mydata1[train.ind,]       #get train data
+  test.data <- mydata1[-train.ind,]       #get test data
+  
+  lm.fit1 <- lm(a1 ~ ., data = train.data)      #model fitting using train data
+  lm.pred <- predict(lm.fit1, test.data)        #get fitted values for test data
+  
+  tr.fit1 <- tree(a1 ~ ., data=train.data)
+  tr.pred <- predict(tr.fit1, test.data)
+  
+  prune.fit1 <- prune.tree(tr.fit1, best=3)
+  prune.pred <- predict(prune.fit1, test.data)
+  
+  bag.fit1 <- randomForest(a1 ~ ., data = clean.algae[,1:12],
+                          mtry = 11, importance = T)
+  bag.pred <- predict(bag.fit1, test.data)
+  
+  random.fit1 <- randomForest(a1 ~ ., data = clean.algae[,1:12],
+                              mtry = 6, importance = T)
+  random.pred <- predict(random.fit1, test.data)
+  
+  #compute mse
+  mse[i,1] <- mean((lm.pred-test.data$a1)^2) 
+  mse[i,2] <- mean((tr.pred-test.data$a1)^2)
+  mse[i,3] <- mean((prune.pred-test.data$a1)^2)
+  mse[i,4] <- mean((bag.pred-test.data$a1)^2)
+  mse[i,5] <- mean((random.pred-test.data$a1)^2)
+}
+
+library(knitr)
+library(kableExtra)
+mse.result <- data.frame(colMeans(mse))
+colnames(mse.result) <- 'MSE'
+mse.result %>% kable() %>% 
+  kable_styling(full_width = F, 
+                bootstrap_options = c('striped', 'hover'))
+
+
+```
+
