@@ -1,0 +1,101 @@
+---
+title: "LDA & QDA"
+date: "2019년 6월 16일"
+output: 
+  html_document :
+    df_print : paged
+---
+
+
+### LIBRARY
+```{r, message=FALSE, warning=FALSE}
+library(MASS)
+library(ISLR)
+```
+
+## IRIS DATA
+
+### LDA
+```{r, warning=FALSE, message=FALSE, fig.align='center', fig.height=6, fig.width=7}
+lda1 <- lda(Species ~ ., data = iris)
+lda1
+plot(lda1, col = as.integer(iris$Species))
+plot(lda1, panel = function(x, y, ...) points(x, y, ...),
+     col = as.integer(iris$Species), pch=20,
+     main = "LDA plot for iris data")
+legend(7, -4.5, levels(iris$Species),
+       pch = 20, col = 1:3, cex = 0.8)
+lda1.pred <- predict(lda1, iris)
+mean(ifelse(iris$Species != lda1.pred$class, 1, 0))  #오분류율
+```
+
+```{r, message=FALSE, warning=FALSE, fig.align='center'}
+plot(lda1.pred$class, iris$Species)
+table(true = iris$Species, pred = lda1.pred$class)
+
+```
+
+### QDA
+```{r, message=FALSE, warning=FALSE, fig.align='center', fig.height=6, fig.width=7}
+qda1 <- qda(Species ~ ., data = iris)
+qda1
+qda1.pred <- predict(qda1, iris)
+mean(ifelse(iris$Species != qda1.pred$class, 1, 0))  #오분류율
+```
+
+```{r, message=FALSE, warning=FALSE, fig.align='center'}
+plot(qda1.pred$class, iris$Species)
+table(true = iris$Species, pred = qda1.pred$class)
+
+```
+
+## Smarket DATA
+```{r, message=FALSE, warning=FALSE}
+head(Smarket)
+attach(Smarket)
+train.ind <- (Year<2005)
+train <- Smarket[train.ind,]
+test.x <- Smarket[!train.ind,]
+test.y <- Direction[!train.ind]
+
+```
+
+
+### LDA
+```{r, message=FALSE, warning=FALSE, fig.align='center'}
+lda.fit <- lda(Direction ~ Lag1 + Lag2, data = train)
+lda.fit
+plot(lda.fit)
+lda.pred <- predict(lda.fit, test.x)
+lda.class <- lda.pred$class
+table(true = test.y, pred = lda.class)
+mean(ifelse(test.y == lda.class, 1, 0))
+
+```
+
+### QDA
+```{r, message=FALSE, warning=FALSE, fig.align='center'}
+qda.fit <- qda(Direction ~ Lag1 + Lag2, data = train)
+qda.fit
+qda.class <- predict(qda.fit, test.x)$class
+table(true = test.y, pred = qda.class)
+mean(ifelse(test.y == qda.class, 1, 0))
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
