@@ -25,7 +25,7 @@
 * Regsubsets  `leaps::regsubsets`  
 </br>
 
-### 4. Tree
+### 4. Tree-Based Methods
 <img src="png/tree.PNG" width="400" hspace="50"/> <img src="png/tree2.PNG" width="220">
 
 * How to find the best TREE using `cv.tree` and `prune.tree`
