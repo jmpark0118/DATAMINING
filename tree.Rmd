@@ -1,6 +1,5 @@
 ---
 title: "tree"
-author: "jmpark"
 date: "2019년 5월 12일"
 output: 
   html_document 
@@ -11,6 +10,13 @@ output:
 library(knitr)
 library(kableExtra)
 library(tidyverse)
+library(tree)
+library(rpart)
+library(randomForest)
+
+```
+
+```{r, message=FALSE, warning=FALSE, include=FALSE}
 algae <- read.table('C:/Users/jeong/Desktop/데이터마이닝/Analysis.txt',
                     header=F,
                     dec='.',
@@ -37,15 +43,18 @@ for(r in which(!complete.cases(algae))){
                      which(is.na(algae[r,]))]), 2,central.value)
 }
 
-dim(clean.algae)
-head(clean.algae,10) %>% kable() %>%
+algae<-clean.algae[,1:12]
+```
+
+```{r, message=FALSE, warning=FALSE}
+dim(algae)
+head(algae,10) %>% kable() %>%
   kable_styling(bootstrap_options = c('striped', 'hover'))
 ```
 
 ### TREE
 ```{r, message=FALSE, warning=FALSE, fig.align='center', fig.height=6, fig.width=8}
-library(tree)
-tr1<-tree(a1 ~ ., data = clean.algae[,c(1:12)])
+tr1<-tree(a1 ~ ., data = algae)
 plot(tr1)
 text(tr1, cex = 0.6, pretty = 0)
 summary(tr1)
@@ -53,36 +62,35 @@ names(tr1)
 data.frame(tr1$frame)
 data.frame(tr1$frame[1,])
 # tr1의 splitting node 설명
-nrow(clean.algae)
-myy <- clean.algae$a1
+nrow(algae)
+myy <- algae$a1
 mean(myy)
 sum((myy-mean(myy))^2)
 # tr1의 첫번째 child node
 data.frame(tr1$frame[2,])
-mean(clean.algae[clean.algae$Cl<7.2915, 'a1'])
+mean(algae[algae$Cl<7.2915, 'a1'])
 
 # minsize : the smallest allowed node size (default=10)
-tr1 <- tree(a1 ~ ., data = clean.algae[,1:12], 
+tr1 <- tree(a1 ~ ., data = algae, 
             minsize = 20)
 plot(tr1)
 text(tr1, cex=0.7, pretty = 0)
 data.frame(tr1$frame)
 
 # mincut : the minimun number of observations to include in either child node (default=5)
-tr1<-tree(a1 ~ ., data=clean.algae[,1:12], mincut=3)
+tr1<-tree(a1 ~ ., data=algae, mincut=3)
 plot(tr1)
 text(tr1, cex=0.6, pretty = 0)
 data.frame(tr1$frame)
 
-library(rpart)
-rpart.tr1 <- rpart(a1 ~ ., data = clean.algae[,1:12])
+rpart.tr1 <- rpart(a1 ~ ., data = algae)
 plot(rpart.tr1, uniform = T)
 text(rpart.tr1, cex = 1, pretty = 0)
 ```
 
 ### TREE PRUNING (cross-validation)
 ```{r, message=FALSE, warning=FALSE, fig.align='center'}
-tr1 <- tree(a1 ~ ., data = clean.algae[,1:12])
+tr1 <- tree(a1 ~ ., data = algae)
 plot(tr1)
 text(tr1, cex = 0.8, pretty = 0)
 cv.tree(tr1)
@@ -103,14 +111,13 @@ tr1.final <- prune.tree(tr1, best=mycv$size[which.min(mycv$dev)]) # best=3
 tr1.final
 plot(tr1.final)
 text(tr1.final)
-plot(clean.algae$a1, predict(tr1.final, clean.algae))
+plot(algae$a1, predict(tr1.final, algae))
 ```
 
 ### BAGGING
 * use all the variables for each split
 ```{r, message=FALSE, warning=FALSE, fig.align='center', fig.width=8, fig.height=5}
-library(randomForest)
-bag.algae <- randomForest(a1 ~ ., data = clean.algae[,1:12],
+bag.algae <- randomForest(a1 ~ ., data = algae,
                           mtry = 11, importance = T)
 bag.algae
 importance(bag.algae)
@@ -118,13 +125,15 @@ varImpPlot(bag.algae)
 ```
 
 ```{r, message=FALSE, warning=FALSE, fig.align='center', fig.width=6}
-plot(clean.algae$a1, predict(bag.algae, clean.algae))
+plot(algae$a1, predict(bag.algae, algae))
 abline(a = 0, b = 1, col = 2)
 ```
 
 ### RANDOMFOREST
+
+* REGRESSION
 ```{r, message=FALSE, warning=FALSE, fig.align='center', fig.width=8, fig.height=5}
-random.algae <- randomForest(a1 ~ ., data = clean.algae[,1:12],
+random.algae <- randomForest(a1 ~ ., data = algae,
                              mtry = 6, importance = T)
 random.algae
 importance(random.algae)
@@ -132,19 +141,107 @@ varImpPlot(random.algae)
 ```
 
 ```{r, message=FALSE, warning=FALSE, fig.align='center', fig.width=6}
-plot(clean.algae$a1, predict(random.algae, clean.algae))
+rf1.pred <- predict(random.algae, algae)
+plot(algae$a1, rf1.pred)
 abline(a = 0, b = 1, col = 2)
+mean((algae$a1 - rf1.pred)^2)
 ```
+
+```{r, message=FALSE, warning=FALSE, fig.align='center'}
+rf1 <- randomForest(a1 ~ ., data = algae)
+plot(rf1)
+
+varImpPlot(rf1)
+par(mfrow = c(2,2))
+partialPlot(rf1, algae, 'Cl')
+partialPlot(rf1, algae, 'PO4')
+partialPlot(rf1, algae, 'oPO4')
+partialPlot(rf1, algae, 'NH4')
+```
+
+```{r, message=FALSE, warning=FALSE, fig.align='center', fig.height=4}
+par(mfrow = c(1,3))
+partialPlot(rf1, algae, 'season')
+partialPlot(rf1, algae, 'size')
+partialPlot(rf1, algae, 'speed')
+```
+
+```{r, include=FALSE}
+par(mfrow = c(1,1))
+
+```
+
+* CLASSIFICATION
+    + iris data
+```{r, message=FALSE, warning=FALSE, fig.align='center'}
+head(iris)
+
+rf2 <- randomForest(Species ~ ., data = iris)
+rf2
+rf2.pred1 <- predict(rf2, iris, type = 'response') #default
+head(rf2.pred1)
+rf2.pred2 <- predict(rf2, iris, type='prob')
+head(rf2.pred2)
+rf2.pred3 <- predict(rf2, iris, type='vote')
+head(rf2.pred3)
+rf2.pred <- predict(rf2)
+table(true = iris$Species, pred = rf2.pred)
+varImpPlot(rf2)
+```
+
+```{r, message=FALSE, warning=FALSE, fig.align='center'}
+partialPlot(rf2, iris, 'Petal.Width', 'versicolor',
+            ylim=c(-15,13))
+partialPlot(rf2, iris, 'Petal.Width', 'setosa',
+            add=T, col=2)
+partialPlot(rf2, iris, 'Petal.Width', 'virginica',
+            add=T, col=4)
+legend('bottomright', 
+       c("versicolor",'setosa', 'virginica'),
+       col=c(1,2,4), lty=1)
+
+partialPlot(rf2, iris, 'Petal.Length', 'versicolor',
+            ylim=c(-15,13))
+partialPlot(rf2, iris, 'Petal.Length', 'setosa',
+            add=T, col=2)
+partialPlot(rf2, iris, 'Petal.Length', 'virginica',
+            add=T, col=4)
+legend('bottomright', 
+       c("versicolor",'setosa', 'virginica'),
+       col=c(1,2,4), lty=1)
+
+partialPlot(rf2, iris, 'Sepal.Length', 'versicolor',
+            ylim=c(-15,13))
+partialPlot(rf2, iris, 'Sepal.Length', 'setosa',
+            add=T, col=2)
+partialPlot(rf2, iris, 'Sepal.Length', 'virginica',
+            add=T, col=4)
+legend('bottomright', 
+       c("versicolor",'setosa', 'virginica'),
+       col=c(1,2,4), lty=1)
+
+partialPlot(rf2, iris, 'Sepal.Width', 'versicolor',
+            ylim=c(-15,13))
+partialPlot(rf2, iris, 'Sepal.Width', 'setosa',
+            add=T, col=2)
+partialPlot(rf2, iris, 'Sepal.Width', 'virginica',
+            add=T, col=4)
+legend('bottomright', 
+       c("versicolor",'setosa', 'virginica'),
+       col=c(1,2,4), lty=1)
+
+```
+
 
 ### Compare MSE
 ```{r, message=FALSE, warning=FALSE}
-n <- nrow(clean.algae)
+n <- nrow(algae)
 p <- 0.7
 rep.n <- 100
 mse <- matrix(0, nrow = rep.n, ncol = 5)
 colnames(mse) <- c('lm error', 'tree error', 'prune error',
                    'bagging error', 'randomForest error')
-mydata1 <- clean.algae[,1:12]
+mydata1 <- algae
 set.seed(1)
 for (i in 1:rep.n){
   train.ind <- sample(n,as.integer(n*p))  #get train index randomly
@@ -176,8 +273,6 @@ for (i in 1:rep.n){
   mse[i,5] <- mean((random.pred-test.data$a1)^2)
 }
 
-library(knitr)
-library(kableExtra)
 mse.result <- data.frame(colMeans(mse))
 colnames(mse.result) <- 'MSE'
 mse.result %>% kable() %>% 
