@@ -31,3 +31,14 @@
 * How to find the best TREE using `cv.tree` and `prune.tree`
 * Use `randomForest::randomForest` to apply **bagging** and **randomForest** methods
 * Compare the MSE of various methods
+</br>
+
+### 5. LDA & QDA
+<p>
+    <img src="png/lda.PNG" width="400" />
+</p>  
+
+* perform `LDA` and `QDA` using
+    + *iris* data
+    + *Smarket* data (**ISLR** package)
+    
